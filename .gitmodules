@@ -1,0 +1,4 @@
+[submodule "distro"]
+	path = distro
+	url = https://github.com/jhondge/distro.git
+	branch = R4
