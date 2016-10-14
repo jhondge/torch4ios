@@ -1,0 +1,43 @@
+#!/bin/bash
+set -e
+SCRIPT_DIR=$( cd $(dirname $0) ; pwd -P )
+XCODE_ROOT=`xcode-select -print-path`
+IPHONE_SDKVERSION=`xcodebuild -showsdks | grep iphoneos | egrep "[[:digit:]]+\.[[:digit:]]+" -o | tail -1`
+ARM_DEV_CMD="xcrun --sdk iphoneos"
+SIM_DEV_CMD="xcrun --sdk iphonesimulator"
+EXTRA_FLAGS="-miphoneos-version-min=6.0 -O2"
+
+# configuration environment variables path
+configure_exports() {
+    if [[ $1 = arm* ]]; then
+        DEV_CMD=$ARM_DEV_CMD
+    else
+        DEV_CMD=$SIM_DEV_CMD
+    fi
+    if [[ $1 = armv7* ]]; then
+        NEON_FLAGS=" -D__NEON__ -mfpu=neon"
+    else
+        NEON_FLAGS=" -D__NEON_HL__"
+    fi
+    export CXX="$DEV_CMD clang++ -arch $1 $EXTRA_FLAGS $NEON_FLAGS"
+    export CC="$DEV_CMD clang -arch $1 $EXTRA_FLAGS $NEON_FLAGS"
+
+    XCMAKE=`$DEV_CMD --find make`
+    XCPATH=`dirname $XCMAKE`
+    export PATH="$XCPATH:$PATH"
+    XCRANLIB=`$DEV_CMD --find ranlib`
+    XCPATH=`dirname $XCRANLIB`
+    export PATH="$XCPATH:$PATH"
+}
+
+# clean previous framework files
+rm -rf $SCRIPT_DIR/framework/lua
+rm -rf $SCRIPT_DIR/framework/lib
+rm -rf $SCRIPT_DIR/framework/include
+rm -rf $SCRIPT_DIR/Torch.framework
+
+# pre build luajit first
+
+echo "*********** generating torch framework ***********"
+
+
