@@ -4,4 +4,4 @@ framework/include
 framework/lua
 framework/lib
 Torch.framework
-
+installed
