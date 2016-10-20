@@ -1,1 +1,7 @@
 *.DS_Store
+build
+framework/include
+framework/lua
+framework/lib
+Torch.framework
+

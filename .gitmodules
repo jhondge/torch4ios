@@ -2,3 +2,7 @@
 	path = distro
 	url = https://github.com/jhondge/distro.git
 	branch = R4
+[submodule "extra/optnet"]
+	path = extra/optnet
+	url = https://github.com/fmassa/optimize-net.git
+	branch = master

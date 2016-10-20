@@ -7,6 +7,7 @@ ARM_DEV_CMD="xcrun --sdk iphoneos"
 SIM_DEV_CMD="xcrun --sdk iphonesimulator"
 EXTRA_FLAGS="-miphoneos-version-min=6.0 -O2"
 
+
 # configuration environment variables path
 configure_exports() {
     if [[ $1 = arm* ]]; then
@@ -30,14 +31,209 @@ configure_exports() {
     export PATH="$XCPATH:$PATH"
 }
 
+build_luajit(){
+	# configuration make path
+	#configure_exports $1
+
+	ISDKP=$(xcrun --sdk iphoneos --show-sdk-path)
+
+    ICC=$(xcrun --sdk iphoneos --find clang)
+
+	ISDKF="-arch $1 -isysroot $ISDKP"
+
+	echo "$PATH"
+
+	#echo "sysroot:$SROOT | $ICC | $ISDKF"
+	export PATH="/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
+	# Build host luajit for minilua and buildvm
+	cd distro/exe/luajit-rocks/luajit-2.1
+
+	make clean
+	if [[ $1 = *64 ]]; then
+		echo "====== build 64bit luajit $ISDKF ======="
+		make CROSS="$(dirname $ICC)/" TARGET_FLAGS="$ISDKF" TARGET_SYS=iOS
+	else
+		echo "====== build 32bit luajit $ISDKF ======="
+		make HOST_CC="clang -m32 -arch i386" CROSS="$(dirname $ICC)/" TARGET_FLAGS="$ISDKF" TARGET_SYS=iOS
+	fi
+	#make CROSS="$(dirname $ICC)/" TARGET_FLAGS="$ISDKF" TARGET_SYS=iOS
+	echo "Done installing Lua"
+
+	cd $SCRIPT_DIR
+}
+
+generate_arch() {
+	# clean install
+	rm -rf $SCRIPT_DIR/installed/
+
+	export IOS_ARCH=$1
+
+	echo "build luajit first"
+	# pre build luajit first
+	build_luajit $1
+
+    configure_exports $1
+    rm -rf $SCRIPT_DIR/build
+    mkdir -p $SCRIPT_DIR/build
+    cd $SCRIPT_DIR/build
+    SROOT=`$DEV_CMD --show-sdk-path`
+    #DWITH_LUA51=ON WITH_LUAJIT21=ON
+    cmake .. -DCMAKE_VERBOSE_MAKEFILE=ON -DWITH_LUAROCKS=OFF -DWITH_LUAJIT21=ON \
+    		 -DCMAKE_INSTALL_PREFIX="$SCRIPT_DIR/installed/" -DCMAKE_OSX_SYSROOT=$SROOT \
+    		 -DLIBRARY_OUTPUT_PATH="$SCRIPT_DIR/installed" \
+    		 -DLUAJIT_SYSTEM_MINILUA="$SCRIPT_DIR/distro/exe/luajit-rocks/luajit-2.1/src/host/minilua" \
+    		 -DLUAJIT_SYSTEM_BUILDVM="$SCRIPT_DIR/distro/exe/luajit-rocks/luajit-2.1/src/host/buildvm" \
+
+    make install
+
+    echo "********** build success $1 ***********"
+
+    cd $SCRIPT_DIR
+    
+    mkdir -p $SCRIPT_DIR/framework/lua
+    mkdir -p $SCRIPT_DIR/framework/lib/$1
+    mkdir -p $SCRIPT_DIR/framework/include
+
+    # copy includes
+    cp -r $SCRIPT_DIR/installed/include/* $SCRIPT_DIR/framework/include
+    #rm -rf $SCRIPT_DIR/installed/
+    
+    # copy libs
+    cp $SCRIPT_DIR/installed/libluajit.a 			         $SCRIPT_DIR/framework/lib/$1/
+    cp $SCRIPT_DIR/installed/libluaT.a                  	 $SCRIPT_DIR/framework/lib/$1/
+    cp $SCRIPT_DIR/installed/libTH.a                     	 $SCRIPT_DIR/framework/lib/$1/
+    cp $SCRIPT_DIR/installed/libtorch.a                		 $SCRIPT_DIR/framework/lib/$1/
+    
+    cp $SCRIPT_DIR/installed/libTHNN.a 		                 $SCRIPT_DIR/framework/lib/$1/
+    cp $SCRIPT_DIR/installed/libpaths.a           			 $SCRIPT_DIR/framework/lib/$1/
+    cp $SCRIPT_DIR/installed/libnnx.a               		 $SCRIPT_DIR/framework/lib/$1/
+    #cp $SCRIPT_DIR/build/3rdparty/cjson/libcjson.a           $SCRIPT_DIR/framework/lib/$1
+    
+    # copy lua scripts
+    mkdir -p $SCRIPT_DIR/framework/lua/torch
+    cp -r $SCRIPT_DIR/distro/pkg/torch/*.lua $SCRIPT_DIR/framework/lua/torch/
+
+    mkdir -p $SCRIPT_DIR/framework/lua/dok
+    cp -r $SCRIPT_DIR/distro/pkg/dok/*.lua $SCRIPT_DIR/framework/lua/dok/
+
+    mkdir -p $SCRIPT_DIR/framework/lua/paths
+    cp -r $SCRIPT_DIR/distro/pkg/paths/*.lua $SCRIPT_DIR/framework/lua/paths/
+    #mkdir -p $SCRIPT_DIR/framework/lua/image
+    #cp -r $SCRIPT_DIR/distro/pkg/image/*.lua $SCRIPT_DIR/framework/lua/image/
+    
+    #mkdir -p $SCRIPT_DIR/framework/lua/xlua
+    #cp -r $SCRIPT_DIR/distro/pkg/xlua/*.lua $SCRIPT_DIR/framework/lua/xlua/
+
+    mkdir -p $SCRIPT_DIR/framework/lua/nn
+    cp -r $SCRIPT_DIR/distro/extra/nn/*.lua $SCRIPT_DIR/framework/lua/nn/
+    
+    mkdir -p $SCRIPT_DIR/framework/lua/nnx
+    cp -r $SCRIPT_DIR/distro/extra/nnx/*.lua $SCRIPT_DIR/framework/lua/nnx/
+
+    mkdir -p $SCRIPT_DIR/framework/lua/optnet
+    cp -r $SCRIPT_DIR/extra/optnet/*.lua $SCRIPT_DIR/framework/lua/optnet/
+
+
+}
+
+extract_archive() {
+    mkdir $1
+    cd $1
+    ar -x ../lib$1.a
+    cd ..
+}
+
+extract_recombine() {
+    cd $SCRIPT_DIR/framework/lib/$1
+    #extract_archive cjson
+    #extract_archive image
+    extract_archive luaT
+    extract_archive THNN
+    extract_archive nnx
+    extract_archive TH
+    extract_archive paths
+    extract_archive torch
+    extract_archive luajit
+    ar -qc libtorch-$1.a paths/*.o luaT/*.o THNN/*.o nnx/*.o TH/*.o \
+        torch/*.o luajit/*.o
+    cd $SCRIPT_DIR
+}
+
+lipo_libs() {
+    $ARM_DEV_CMD lipo -create                          \
+    $SCRIPT_DIR/framework/lib/armv7/libtorch-armv7.a   \
+    $SCRIPT_DIR/framework/lib/armv7s/libtorch-armv7s.a   \
+    $SCRIPT_DIR/framework/lib/arm64/libtorch-arm64.a   \
+    -output $SCRIPT_DIR/framework/lib/libtorch.a
+}
+
 # clean previous framework files
 rm -rf $SCRIPT_DIR/framework/lua
 rm -rf $SCRIPT_DIR/framework/lib
 rm -rf $SCRIPT_DIR/framework/include
 rm -rf $SCRIPT_DIR/Torch.framework
 
-# pre build luajit first
+echo "generating torch"
+generate_arch armv7
+generate_arch armv7s
+generate_arch arm64
 
-echo "*********** generating torch framework ***********"
+echo "extracting archives and recombining"
+extract_recombine armv7
+extract_recombine armv7s
+extract_recombine arm64
 
+echo "creating universal binary"
+
+lipo_libs
+
+echo "creating framework"
+mkdir -p $SCRIPT_DIR/Torch.framework/Versions/A/Headers
+cp $SCRIPT_DIR/framework/lib/libtorch.a \
+    $SCRIPT_DIR/Torch.framework/Versions/A/Torch
+cp -r $SCRIPT_DIR/framework/include/* \
+    $SCRIPT_DIR/Torch.framework/Versions/A/Headers
+cp -r $SCRIPT_DIR/framework/lua \
+    $SCRIPT_DIR/Torch.framework/Versions/A/Resources
+cd $SCRIPT_DIR/Torch.framework/Versions
+ln -s A Current
+cd $SCRIPT_DIR/Torch.framework
+ln -s Versions/Current/Torch Torch
+ln -s Versions/Current/Headers Headers
+ln -s Versions/Current/Resources Resources
+
+echo "creating header files"
+HEADER=$SCRIPT_DIR/Torch.framework/Versions/A/Headers/Torch.h
+echo '#ifndef TORCH_IOS_FRAMEWORK_TORCH_H' > $HEADER
+echo '#define TORCH_IOS_FRAMEWORK_TORCH_H' >> $HEADER
+echo '#ifdef __cplusplus' >> $HEADER
+echo 'extern "C" {' >> $HEADER
+echo '#endif' >> $HEADER
+echo '#include "TH/TH.h"' >> $HEADER
+echo '#include "lua.h"' >> $HEADER
+echo '#include "luaconf.h"' >> $HEADER
+echo '#include "lauxlib.h"' >> $HEADER
+echo '#include "luaT.h"' >> $HEADER
+echo '#include "lualib.h"' >> $HEADER
+echo '#ifdef __cplusplus' >> $HEADER
+echo '}' >> $HEADER
+echo '#endif' >> $HEADER
+echo '#endif' >> $HEADER
+echo >> $HEADER
+
+cat $SCRIPT_DIR/Torch.framework/Versions/A/Headers/luaT.h | \
+    sed 's/include [<]/include "/g' | \
+    sed 's/[>]$/"/g' > \
+    $SCRIPT_DIR/Torch.framework/Versions/A/Headers/luaT-new.h
+
+mv  $SCRIPT_DIR/Torch.framework/Versions/A/Headers/luaT-new.h \
+    $SCRIPT_DIR/Torch.framework/Versions/A/Headers/luaT.h
+
+echo "==> exported complete framework in Torch.framework"
+echo "    in Xcode just drag Torch.framework into"
+echo "    Build Phases > Link Binary with Libraries"
+echo "    and add path to Torch.framework parent folder in"
+echo "    Build Settings > Framework Search Paths"
+echo
+echo "    Include headers with #include <Torch/Torch.h>"
 
