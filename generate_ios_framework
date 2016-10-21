@@ -106,6 +106,7 @@ generate_arch() {
     
     cp $SCRIPT_DIR/installed/libTHNN.a 		                 $SCRIPT_DIR/framework/lib/$1/
     cp $SCRIPT_DIR/installed/libpaths.a           			 $SCRIPT_DIR/framework/lib/$1/
+    cp $SCRIPT_DIR/installed/libsys.a                        $SCRIPT_DIR/framework/lib/$1/
     cp $SCRIPT_DIR/installed/libnnx.a               		 $SCRIPT_DIR/framework/lib/$1/
     #cp $SCRIPT_DIR/build/3rdparty/cjson/libcjson.a           $SCRIPT_DIR/framework/lib/$1
      
@@ -126,15 +127,18 @@ generate_arch() {
     mkdir -p $SCRIPT_DIR/framework/lua/nn
     cp -r $LUA_INSTALL_DIR/nn/*.lua $SCRIPT_DIR/framework/lua/nn/
     
+    mkdir -p $SCRIPT_DIR/framework/lua/sys
+    cp -r $LUA_INSTALL_DIR/sys/*.lua $SCRIPT_DIR/framework/lua/sys/
+
+    mkdir -p $SCRIPT_DIR/framework/lua/xlua
+    cp -r $LUA_INSTALL_DIR/xlua/*.lua $SCRIPT_DIR/framework/lua/xlua/
+
     mkdir -p $SCRIPT_DIR/framework/lua/nnx
     cp -r $LUA_INSTALL_DIR/nnx/*.lua $SCRIPT_DIR/framework/lua/nnx/
 
     # copy without install lua
     mkdir -p $SCRIPT_DIR/framework/lua/optnet
     cp -r $SCRIPT_DIR/extra/optnet/*.lua $SCRIPT_DIR/framework/lua/optnet/
-
-    mkdir -p $SCRIPT_DIR/framework/lua/xlua
-    cp -r $SCRIPT_DIR/distro/pkg/xlua/*.lua $SCRIPT_DIR/framework/lua/xlua/
 
 }
 
@@ -151,12 +155,13 @@ extract_recombine() {
     #extract_archive image
     extract_archive luaT
     extract_archive THNN
+    extract_archive sys
     extract_archive nnx
     extract_archive TH
     extract_archive paths
     extract_archive torch
     extract_archive luajit
-    ar -qc libtorch-$1.a paths/*.o luaT/*.o THNN/*.o nnx/*.o TH/*.o \
+    ar -qc libtorch-$1.a paths/*.o luaT/*.o THNN/*.o sys/*.o nnx/*.o TH/*.o \
         torch/*.o luajit/*.o
     cd $SCRIPT_DIR
 }
