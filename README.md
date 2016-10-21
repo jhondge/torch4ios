@@ -1,7 +1,7 @@
 # Torch7 Library for iOS 
 Torch7 Library for iOS
 
-Heavily inspired from the [torch-ios](https://github.com/clementfarabet/torch-ios) from https://github.com/clementfarabet/torch-ios
+Heavily inspired from the [torch-ios](https://github.com/clementfarabet/torch-ios) and [torch-android](https://github.com/soumith/torch-android)
 
 ## Preparing
 
